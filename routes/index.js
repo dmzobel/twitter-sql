@@ -1,33 +1,44 @@
 'use strict';
 var express = require('express');
 var router = express.Router();
-var tweetBank = require('../tweetBank');
+// var tweetBank = require('../tweetBank');
+const client = require('../db');
 
 module.exports = function makeRouterWithSockets (io) {
 
   // a reusable function
   function respondWithAllTweets (req, res, next){
-    var allTheTweets = tweetBank.list();
-    res.render('index', {
-      title: 'Twitter.js',
-      tweets: allTheTweets,
-      showForm: true
+    client.query('SELECT * FROM tweets JOIN users ON users.id = tweets.user_id', function (err, result) {
+      if (err) return next(err); // pass errors to Express
+      var tweets = result.rows;
+      res.render('index', { title: 'Twitter.js', tweets: tweets, showForm: true });
     });
   }
 
-  // here we basically treet the root view and tweets view as identical
+  // here we basically treat the root view and tweets view as identical
   router.get('/', respondWithAllTweets);
   router.get('/tweets', respondWithAllTweets);
 
   // single-user page
   router.get('/users/:username', function(req, res, next){
-    var tweetsForName = tweetBank.find({ name: req.params.username });
-    res.render('index', {
-      title: 'Twitter.js',
-      tweets: tweetsForName,
-      showForm: true,
-      username: req.params.username
-    });
+    let user = req.params.username;
+    let queryParams = [user];
+    let queryString = `SELECT content, users.name
+                        FROM tweets
+                        JOIN users ON tweets.user_id=users.id
+                        WHERE users.name = $1`;
+
+    // var tweetsForName = tweetBank.find({ name: req.params.username });
+    client.query(queryString, queryParams, function (err, data) {
+      if (err) throw err;
+
+      res.render('index', {
+        title: 'Twitter.js',
+        tweets: data.rows,
+        showForm: true,
+        username: req.params.username
+      });
+    })
   });
 
   // single-tweet page
@@ -46,10 +57,10 @@ module.exports = function makeRouterWithSockets (io) {
     res.redirect('/');
   });
 
-  // // replaced this hard-coded route with general static routing in app.js
-  // router.get('/stylesheets/style.css', function(req, res, next){
-  //   res.sendFile('/stylesheets/style.css', { root: __dirname + '/../public/' });
-  // });
+  // replaced this hard-coded route with general static routing in app.js
+  router.get('/stylesheets/style.css', function(req, res, next){
+    res.sendFile('/stylesheets/style.css', { root: __dirname + '/../public/' });
+  });
 
   return router;
 }
